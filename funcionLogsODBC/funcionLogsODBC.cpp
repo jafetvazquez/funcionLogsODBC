@@ -33,21 +33,21 @@ void checkError(SQLRETURN ret, SQLHANDLE handle, SQLSMALLINT type, const std::ws
     SQLHDBC hDbc = SQL_NULL_HDBC;
     SQLRETURN ret;
 
-    // 1️⃣ Crear entorno ODBC
+    // Crear entorno ODBC
     ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &hEnv);
     checkError(ret, hEnv, SQL_HANDLE_ENV, L"Error creando entorno ODBC");
 
     ret = SQLSetEnvAttr(hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
     checkError(ret, hEnv, SQL_HANDLE_ENV, L"Error configurando versión ODBC");
 
-    // 2️⃣ Crear conexión
+    // Crear conexión
     ret = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDbc);
     checkError(ret, hDbc, SQL_HANDLE_DBC, L"Error creando conexión ODBC");
 
-    // 📌 OPCIÓN 1: Usar DSN creado (cambia "MiPostgres" por tu DSN)
+    //OPCIÓN 1: Usar DSN creado (cambia "MiPostgres" por tu DSN)
     //SQLWCHAR connStr[] = L"DSN=PostgreSQL35W;UID=postgres;PWD=123;";
 
-    // 📌 OPCIÓN 2: Conexión directa sin DSN
+    //OPCIÓN 2: Conexión directa sin DSN
     SQLWCHAR connStr[] = L"DRIVER={PostgreSQL Unicode};Server=localhost;Port=5432;Database=postgres;UID=postgres;PWD=123;";
 
     ret = SQLDriverConnectW(hDbc, NULL, connStr, SQL_NTS,
@@ -56,7 +56,7 @@ void checkError(SQLRETURN ret, SQLHANDLE handle, SQLSMALLINT type, const std::ws
 
     std::wcout << L"Conexión ODBC a PostgreSQL exitosa" << std::endl;
 
-    // 3️⃣ Desconectar y liberar recursos
+    // Desconectar y liberar recursos
     SQLDisconnect(hDbc);
     SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
     SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
@@ -183,7 +183,7 @@ void enviarLogNoError(const std::string& mensaje, int dia, int mes, int anio, in
     ret = SQLPrepareW(hStmt, query, SQL_NTS);
     //checkError(ret, hStmt, SQL_HANDLE_STMT, L"Error preparando consulta");
 
-    // 5️⃣ Enlazar parámetros
+    // Enlazar parámetros
     SQLWCHAR mensajeW[512];
     mbstowcs(mensajeW, mensaje.c_str(), mensaje.size() + 1); // convertir string a wstring
 
@@ -203,7 +203,7 @@ void enviarLogNoError(const std::string& mensaje, int dia, int mes, int anio, in
     ret = SQLBindParameter(hStmt, 5, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &tienda, 0, NULL);
     //checkError(ret, hStmt, SQL_HANDLE_STMT, L"Error vinculando tienda");
 
-    // 6️⃣ Ejecutar
+    // Ejecutar
     ret = SQLExecute(hStmt);
     checkError(ret, hStmt, SQL_HANDLE_STMT, L"Error ejecutando consulta");
 
@@ -211,7 +211,7 @@ void enviarLogNoError(const std::string& mensaje, int dia, int mes, int anio, in
         << L"', Tienda=" << tienda
         << L", Fecha=" << dia << L"/" << mes << L"/" << anio << std::endl;
 
-    // 7️⃣ Liberar recursos
+    // Liberar recursos
     SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
     SQLDisconnect(hDbc);
     SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
