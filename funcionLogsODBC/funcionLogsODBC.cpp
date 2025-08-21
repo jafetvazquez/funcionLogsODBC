@@ -149,6 +149,60 @@ void enviarLogNoError(const std::string& mensaje, int dia, int mes, int anio, in
     SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
 }
 
+
+// funcion para insertar logs con odbc sin checkerror
+void enviarLogNoErrorParams(const std::string& mensaje, int dia, int mes, int anio, int tienda) { //recibe 5 params
+    SQLHENV hEnv = SQL_NULL_HENV; // entorno odbc
+    SQLHDBC hDbc = SQL_NULL_HDBC; // conexión a db
+    SQLHSTMT hStmt = SQL_NULL_HSTMT; // statement SQL
+    SQLRETURN ret; // retorno odbc
+
+    // inicializar entorno ODBC
+    ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &hEnv);
+    // version de odbc
+    ret = SQLSetEnvAttr(hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
+
+    // conexión
+    ret = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDbc);
+
+    // SQLWCHAR con data db
+    SQLWCHAR connStr[] = L"DRIVER={PostgreSQL Unicode};Server=localhost;Port=5432;Database=postgres;UID=postgres;PWD=123;";
+    // establecer conexion
+    ret = SQLDriverConnectW(hDbc, NULL, connStr, SQL_NTS, NULL, 0, NULL, SQL_DRIVER_COMPLETE);
+
+    // statement sql
+    ret = SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+
+    // Preparar consulta parametrizada
+    SQLWCHAR query[] = L"INSERT INTO logmsgs (mensaje, dia, mes, anio, tienda) VALUES (?, ?, ?, ?, ?)";
+    ret = SQLPrepareW(hStmt, query, SQL_NTS);
+
+    // Enlazar parámetros
+    SQLWCHAR mensajeW[512]; // arreglo para mensaje en formato wide
+    mbstowcs(mensajeW, mensaje.c_str(), mensaje.size() + 1); // convertir string a wstring
+
+    // enlazar params por posicion
+    ret = SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_WCHAR, SQL_WVARCHAR, wcslen(mensajeW), 0, mensajeW, 0, NULL);
+    ret = SQLBindParameter(hStmt, 2, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &dia, 0, NULL);
+    ret = SQLBindParameter(hStmt, 3, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &mes, 0, NULL);
+    ret = SQLBindParameter(hStmt, 4, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &anio, 0, NULL);
+    ret = SQLBindParameter(hStmt, 5, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &tienda, 0, NULL);
+
+    // ejecutar consulta
+    ret = SQLExecute(hStmt);
+
+    // mensaje de guardado
+    std::wcout << L"Log guardado: Mensaje='" << mensajeW
+        << L"', Tienda=" << tienda
+        << L", Fecha=" << dia << L"/" << mes << L"/" << anio << std::endl;
+
+    // Liberar recursos odbc creados
+    SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+    SQLDisconnect(hDbc);
+    SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
+    SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
+}
+
 // Insertar log en la base con ODBC
 /*void enviarLog(const std::string& mensaje, int dia, int mes, int anio, int tienda) {
     SQLHENV hEnv = SQL_NULL_HENV;
