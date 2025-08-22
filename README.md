@@ -15,3 +15,7 @@
    - Linker → Input → Additional Dependencies. en solución c++
 6. usar dsn-less si no se creo un DSN para la conexión
    - SQLWCHAR connStr[] = L"DRIVER={PostgreSQL Unicode};Server=localhost;Port=5432;Database=postgres;UID=postgres;PWD=123;";
+
+FUNCIONES PRINCIPALES:
+   -enviarLogParams()
+   -conectarPostgreSQL (solo de manera local)
