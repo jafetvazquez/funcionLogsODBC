@@ -150,57 +150,111 @@ void enviarLogNoError(const std::string& mensaje, int dia, int mes, int anio, in
 }
 
 
-// funcion para insertar logs con odbc sin checkerror
-void enviarLogNoErrorParams(const std::string& mensaje, int dia, int mes, int anio, int tienda) { //recibe 5 params
-    SQLHENV hEnv = SQL_NULL_HENV; // entorno odbc
-    SQLHDBC hDbc = SQL_NULL_HDBC; // conexión a db
-    SQLHSTMT hStmt = SQL_NULL_HSTMT; // statement SQL
-    SQLRETURN ret; // retorno odbc
+bool conectarPostgreSQL(SQLHENV& hEnv, SQLHDBC& hDbc) {
+    SQLRETURN ret;
 
-    // inicializar entorno ODBC
+    // 1. Allocate environment
     ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &hEnv);
-    // version de odbc
-    ret = SQLSetEnvAttr(hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) return false;
 
-    // conexión
+    ret = SQLSetEnvAttr(hEnv, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) return false;
+
+    // 2. Allocate connection handle
     ret = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDbc);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) return false;
 
-    // SQLWCHAR con data db
-    SQLWCHAR connStr[] = L"DRIVER={PostgreSQL Unicode};Server=localhost;Port=5432;Database=postgres;UID=postgres;PWD=123;";
-    // establecer conexion
-    ret = SQLDriverConnectW(hDbc, NULL, connStr, SQL_NTS, NULL, 0, NULL, SQL_DRIVER_COMPLETE);
+    // 3. Build DSN-less connection string
+    SQLCHAR connStr[] =
+        "Driver={PostgreSQL Unicode};"
+        "Server=localhost;"
+        "Port=5432;"
+        "Database=tienda0902;"
+        "Uid=postgres;"
+        "Pwd=123;";
 
-    // statement sql
+    SQLCHAR outStr[1024];
+    SQLSMALLINT outLen;
+
+    ret = SQLDriverConnectA(hDbc, NULL, connStr, SQL_NTS, outStr, sizeof(outStr), &outLen, SQL_DRIVER_NOPROMPT);
+    return (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO);
+}
+
+void mostrarError(const std::string& funcion, SQLHANDLE handle, SQLSMALLINT tipoHandle) {
+    SQLWCHAR estado[6], mensaje[256];
+    SQLINTEGER codigo;
+    SQLSMALLINT longitud;
+    int i = 1;
+
+    while (SQLGetDiagRec(tipoHandle, handle, i, estado, &codigo, mensaje, sizeof(mensaje), &longitud) == SQL_SUCCESS) {
+        std::wstring estadoStr(estado); // Convertir SQLWCHAR a std::wstring
+        std::wstring mensajeStr(mensaje); // Convertir SQLWCHAR a std::wstring
+
+        std::wcerr << L"[ODBC Error] () "
+            << L"SQLSTATE: " << estadoStr << L", Código: " << codigo
+            << L", Mensaje: " << mensajeStr << std::endl;
+        i++;
+    }
+}
+
+// funcion para insertar logs con odbc sin checkerror
+bool enviarLogParams(SQLHDBC hDbc, int cliente, int factura, const std::string& mensaje, const std::string& fechacompra, int tienda, const std::string& fuente) { //recibe 5 params
+    SQLHSTMT hStmt; // statement sql
+    SQLRETURN ret; // retorno de odbc
+
+    // Crear statement
     ret = SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+    // validacion si se creó statement
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) return false;
 
-    // Preparar consulta parametrizada
-    SQLWCHAR query[] = L"INSERT INTO logmsgs (mensaje, dia, mes, anio, tienda) VALUES (?, ?, ?, ?, ?)";
-    ret = SQLPrepareW(hStmt, query, SQL_NTS);
+    // Consulta parametrizada: SELECT * FROM fun_guardarlogbonificaciondiaria(?, ?, ?, ?, ?, ?)
+    SQLCHAR query[] = "SELECT * FROM fun_guardarlogbonificaciondiaria(?, ?, ?, ?, ?, ?)";
+    // preparar consulta
+    ret = SQLPrepareA(hStmt, query, SQL_NTS);
+    // validacion de preparacion de consulta
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        std::cerr << "[Error] SQLPrepareA" << std::endl;
+        return false;
+    }
 
-    // Enlazar parámetros
-    SQLWCHAR mensajeW[512]; // arreglo para mensaje en formato wide
-    mbstowcs(mensajeW, mensaje.c_str(), mensaje.size() + 1); // convertir string a wstring
+    // Bind de parámetros ordenados
+    // param: cliente
+    SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&cliente, 0, NULL);
+    // param: factura
+    SQLBindParameter(hStmt, 2, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&factura, 0, NULL);
+    // param: mensaje
+    SQLBindParameter(hStmt, 3, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, mensaje.size(), 0, (SQLPOINTER)mensaje.c_str(), 0, NULL);
+    // param: fechacompra
+    SQLBindParameter(hStmt, 4, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, fechacompra.size(), 0, (SQLPOINTER)fechacompra.c_str(), 0, NULL);
+    // param: tienda
+    SQLBindParameter(hStmt, 5, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER, 0, 0, (SQLPOINTER)&tienda, 0, NULL);
+    // param: fuente
+    SQLBindParameter(hStmt, 6, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, fuente.size(), 0, (SQLPOINTER)fuente.c_str(), 0, NULL);
 
-    // enlazar params por posicion
-    ret = SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_WCHAR, SQL_WVARCHAR, wcslen(mensajeW), 0, mensajeW, 0, NULL);
-    ret = SQLBindParameter(hStmt, 2, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &dia, 0, NULL);
-    ret = SQLBindParameter(hStmt, 3, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &mes, 0, NULL);
-    ret = SQLBindParameter(hStmt, 4, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &anio, 0, NULL);
-    ret = SQLBindParameter(hStmt, 5, SQL_PARAM_INPUT, SQL_C_LONG, SQL_INTEGER, 0, 0, &tienda, 0, NULL);
-
-    // ejecutar consulta
+    // Ejecutar
     ret = SQLExecute(hStmt);
+    // validacion dfe ejecucion
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        std::cerr << "[Error] SQLExecute" << std::endl;
+        return false;
+    }
 
-    // mensaje de guardado
-    std::wcout << L"Log guardado: Mensaje='" << mensajeW
-        << L"', Tienda=" << tienda
-        << L", Fecha=" << dia << L"/" << mes << L"/" << anio << std::endl;
+    // Leer resultados si retorna algo
+    char buffer[256];
+    // indicador de longitud
+    SQLLEN ind;
 
-    // Liberar recursos odbc creados
+    // leer data de resultados
+    while (SQLFetch(hStmt) == SQL_SUCCESS) {
+        // ontener data de primer columna
+        SQLGetData(hStmt, 1, SQL_C_CHAR, buffer, sizeof(buffer), &ind);
+		// mostrar resultado
+        std::cout << "Resultado: " << buffer << std::endl;
+    }
+    // liberar recursos
     SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
-    SQLDisconnect(hDbc);
-    SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
-    SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
+    // retun existoso
+    return true;
 }
 
 // Insertar log en la base con ODBC
@@ -273,16 +327,24 @@ void enviarLogNoErrorParams(const std::string& mensaje, int dia, int mes, int an
 }*/
 
 int main() {
+    SQLHENV hEnv;
+    SQLHDBC hDbc;
     // Ejecucion de funciones
     std::cout << "Ejecutando main() " << std::endl;
 
+    if (!conectarPostgreSQL(hEnv, hDbc)) {
+        std::cerr << "Error al conectar a PostgreSQL." << std::endl;
+        return 1;
+    }
 
     //funcion con odbc
     //SQLHDBC hDbc = conexionODBC(L"localhost", L"postgres", L"postgres", L"123", 5432);
     //std::cout << hDbc << std::endl;
     //conectaODBC();
 
-    enviarLogNoError("Factura 9432456", 14, 8, 2025, 101);
-
+    //enviarLogNoError("Factura 9432456", 14, 8, 2025, 101);
+    //enviarLogParams(conexion, cliente, factura, mesaje_log, fechacompra, tienda, fuente_log);
+    enviarLogParams(hDbc, 10203, 240340, "este es el log....", "2025-08-20", 803, "este log viene de.....");
+    system("pause");
     return 0; // Devuelve un código de éxito
 }
