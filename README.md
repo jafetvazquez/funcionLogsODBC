@@ -17,5 +17,5 @@
    - SQLWCHAR connStr[] = L"DRIVER={PostgreSQL Unicode};Server=localhost;Port=5432;Database=postgres;UID=postgres;PWD=123;";
 
 FUNCIONES PRINCIPALES:
-   -enviarLogParams()
-   -conectarPostgreSQL (solo de manera local)
+   - enviarLogParams(conexion, cliente, factura, mesaje_log, fechacompra, tienda, fuente_log);
+   - conectarPostgreSQL (solo de manera local)
